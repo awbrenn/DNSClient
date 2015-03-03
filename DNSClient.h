@@ -25,9 +25,13 @@ constants.
 #include <unistd.h>     /* for close() */
 #include <time.h>
 #include <sys/time.h>
+#include <iostream>
+#include <vector>
+#include <signal.h>
+
 
 #define MAX_RAND_NUMBER 1000000000 /* maximum value that the random number can be */
 #define MAX_BUFF 11     /* Longest string to server */
 
-void DieWithError(char *errorMessage);  /* External error handling function */
-
+void dieWithError(char *errorMessage);  /* External error handling function */
+void stateProperUsageAndDie();

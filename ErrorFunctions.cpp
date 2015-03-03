@@ -17,14 +17,20 @@ List of routines:
 #include <stdio.h>  /* for perror() */
 #include <stdlib.h> /* for exit() */
 
+
 /*	DieWithError
 	input			- takes an error message
 	output			- none
 	description:	This routine prints an error message
 					and exits the program.
 */
-void DieWithError(char *errorMessage)
-{
-    perror(errorMessage);
+extern void dieWithError(char *error_message) {
+    perror(error_message);
     exit(1);
+}
+
+
+void stateProperUsageAndDie() {
+    dieWithError((char *)"USAGE ERROR\n\nProper Use:\ndnsq [-t <time>] "
+                         "[-r <retries>] [-p <port>] @<svr> <name>");
 }

@@ -25,14 +25,14 @@ int main (int argc, char *argv[]) {
     uint16_t query_header_arcount = 0;
     struct sockaddr_in serverAddr;   /* server address */
     struct hostent *the_host;         /* Hostent from gethostbyname() */
-
-    // struct sockaddr_in fromAddr;     /* Source address */
+    unsigned int fromSize;           /* In-out of address size for recvfrom() */
+    struct sockaddr_in fromAddr;     /* Source address */
     // struct hostent *thehost;         /* Hostent from gethostbyname() */
     // unsigned int fromSize;           /* In-out of address size for recvfrom() */
     char *DNSServIP;                    /* IP address of server */
     struct sigaction timeoutAction;  /* signal action for timeouts */
     vector<uint16_t> DNS_message;
-    uint8_t *DNS_response
+    uint8_t DNS_response[MAX_BUFF];
 
 
     if (argc == 3) // zero optional flags set
@@ -97,14 +97,18 @@ int main (int argc, char *argv[]) {
 
     // printf("\nsize of DNS_message.data() %d\n", DNS_message.size()*sizeof(uint16_t));
 
+    printf("\n%s, %d\n", DNSServIP, PORT);
+
     /* Send DNS query to the server */
     if (sendto(sock, DNS_message.data(), DNS_message.size()*sizeof(uint16_t), 0, 
             (struct sockaddr *) &serverAddr, sizeof(serverAddr)) != DNS_message.size()*sizeof(uint16_t))
-        DieWithError("sendto() sent a different number of bytes than expected");
+        dieWithError((char *)"sendto() sent a different number of bytes than expected");
 
-    recvfrom(sock, respStringBuffer, MAX_BUFF, 0, 
-                                (struct sockaddr *) &fromAddr, &fromSize);
+    printf("\n%lu\n", DNS_message.size()*sizeof(uint16_t));
 
+    recvfrom(sock, DNS_response, MAX_BUFF, 0, (struct sockaddr *) &fromAddr, &fromSize);
+
+    printf("\n%d\n", fromSize);
 
 	return 0;
 }

@@ -28,9 +28,11 @@ constants.
 #include <iostream>
 #include <vector>
 #include <signal.h>
+#include <stdint.h>
 
 
-#define MAX_RAND_NUMBER 1000000000 /* maximum value that the random number can be */
+#define MAX_RAND_NUMBER 65535 /* maximum value that the random number can be
+								 for a 16 bit unsigned integer */
 #define MAX_BUFF 11     /* Longest string to server */
 
 void dieWithError(char *errorMessage);  /* External error handling function */

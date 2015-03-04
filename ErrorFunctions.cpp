@@ -24,6 +24,8 @@ List of routines:
 	description:	This routine prints an error message
 					and exits the program.
 */
+
+/*!!!!!!!!!!!!!!!!!! TODO: append ERROR to the beginning of an error message !!!!!!!!!!!!!!!*/
 extern void dieWithError(char *error_message) {
     perror(error_message);
     exit(1);

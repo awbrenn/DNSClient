@@ -9,6 +9,7 @@ void buildQueryHeader(vector<uint16_t> *, uint16_t, uint16_t, uint16_t, uint16_t
 void buildQueryBody(vector<uint16_t> *, char *);
 void getLabelSizes(vector<uint8_t> *label_sizes, char *host_name);
 void addBodyToDNSMessage(vector<uint8_t> *DNS_body, vector<uint16_t> *DNS_message);
+void catchAlarm(int);
 
 /* Global Variables */
 unsigned int TIMEOUT_SECONDS = 5;
@@ -33,6 +34,7 @@ int main (int argc, char *argv[]) {
     struct sigaction timeoutAction;  /* signal action for timeouts */
     vector<uint16_t> DNS_message;
     uint8_t DNS_response[MAX_BUFF];
+    int respNum;
 
 
     if (argc == 3) // zero optional flags set
@@ -50,6 +52,13 @@ int main (int argc, char *argv[]) {
     }
     else
        stateProperUsageAndDie();
+
+    timeoutAction.sa_handler = catchAlarm; /* callse catchAlarm if a timeout occurs */
+    if (sigfillset(&timeoutAction.sa_mask) < 0) /* blocks everything in handler */
+        dieWithError((char *)"sigfillset() failed");
+    timeoutAction.sa_flags = 0;
+    if (sigaction(SIGALRM, &timeoutAction, 0) < 0)
+        dieWithError((char *)"sigaction() failed for SIGALRM");
 
     // printf("\n%d, %d, %d\n", TIMEOUT_SECONDS, RETRIES, PORT);
 
@@ -99,21 +108,54 @@ int main (int argc, char *argv[]) {
 
     printf("\n%s, %d\n", DNSServIP, PORT);
 
-    /* Send DNS query to the server */
-    if (sendto(sock, DNS_message.data(), DNS_message.size()*sizeof(uint16_t), 0, 
-            (struct sockaddr *) &serverAddr, sizeof(serverAddr)) != DNS_message.size()*sizeof(uint16_t))
-        dieWithError((char *)"sendto() sent a different number of bytes than expected");
 
-    printf("\n%lu\n", DNS_message.size()*sizeof(uint16_t));
+    while (RETRIES != 0) {
+        --RETRIES; // remove 1 retry attempt
+        /* Send DNS query to the server */
+        if (sendto(sock, DNS_message.data(), DNS_message.size()*sizeof(uint16_t), 0, 
+                (struct sockaddr *) &serverAddr, sizeof(serverAddr)) != DNS_message.size()*sizeof(uint16_t))
+            dieWithError((char *)"sendto() sent a different number of bytes than expected");
 
-    recvfrom(sock, DNS_response, MAX_BUFF, 0, (struct sockaddr *) &fromAddr, &fromSize);
+        printf("\n%lu\n", DNS_message.size()*sizeof(uint16_t));
 
-    printf("\n%d\n", fromSize);
+        alarm(TIMEOUT_SECONDS); // set timeout for TIMEOUT_SECONDS seconds
+        respNum = recvfrom(sock, DNS_response, MAX_BUFF, 0, (struct sockaddr *) &fromAddr, &fromSize);
+
+        /* response error handler */
+        if (respNum == -1) {
+            if (errno == EINTR) { /* timeout occured */
+                if (RETRIES == 0)
+                    dieWithError((char *)"timeout retry attempt max reached");
+                else 
+                    continue; /* skip to next iteration of while loop */
+            }
+        }
+        else
+            break;
+
+        /* reset the alarm */
+        alarm(0);
+    }
+
+
 
 	return 0;
 }
 
 
+/*  catchAlarm
+    input       - the function takes an int but we ignore it
+    output      - none
+    description - catches an alarm if a timeout occurs.
+*/
+void catchAlarm(int ignored) { return; } /* don't do anything in handler, just return */
+
+
+/*  buildQueryHeader
+    input       - query header information
+    output      - none
+    description - 
+*/
 void buildQueryHeader(vector<uint16_t> *DNS_message, uint16_t query_id, uint16_t query_header_flags,
                 uint16_t query_header_qdcount, uint16_t query_header_ancount,
                 uint16_t query_header_nscount, uint16_t query_header_arcount) {

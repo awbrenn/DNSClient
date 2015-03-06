@@ -33,7 +33,7 @@ constants.
 
 #define MAX_RAND_NUMBER 65535 /* maximum value that the random number can be
 								 for a 16 bit unsigned integer */
-#define MAX_BUFF 10000     /* Longest string to server */
+#define MAX_BUFF 1000     /* Longest string to server */
 
 void dieWithError(char *errorMessage);  /* External error handling function */
 void stateProperUsageAndDie();

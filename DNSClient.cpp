@@ -10,11 +10,17 @@ void buildQueryBody(vector<uint16_t> *, char *);
 void getLabelSizes(vector<uint8_t> *label_sizes, char *host_name);
 void addBodyToDNSMessage(vector<uint8_t> *DNS_body, vector<uint16_t> *DNS_message);
 void catchAlarm(int);
+void processResponse(uint8_t *DNS_response, int respLen);
+void addAliasToResponseString(uint8_t [], string *, unsigned int);
+unsigned int skipName(uint8_t DNS_response[], unsigned int response_offset);
+int processAnswer(uint8_t DNS_response[], unsigned int response_offset, uint16_t type, char *auth_string);
+void addIPAddressToResponseString(uint8_t DNS_response[], string *response_string, unsigned int response_offset);
 
 /* Global Variables */
 unsigned int TIMEOUT_SECONDS = 5;
 unsigned int RETRIES = 3;
 unsigned short PORT = 53;
+unsigned char QNAME_LEN;
 
 int main (int argc, char *argv[]) {
     int sock;                        /* Socket descriptor */
@@ -28,13 +34,11 @@ int main (int argc, char *argv[]) {
     struct hostent *the_host;         /* Hostent from gethostbyname() */
     unsigned int fromSize;           /* In-out of address size for recvfrom() */
     struct sockaddr_in fromAddr;     /* Source address */
-    // struct hostent *thehost;         /* Hostent from gethostbyname() */
-    // unsigned int fromSize;           /* In-out of address size for recvfrom() */
     char *DNSServIP;                    /* IP address of server */
     struct sigaction timeoutAction;  /* signal action for timeouts */
     vector<uint16_t> DNS_message;
     uint8_t DNS_response[MAX_BUFF];
-    int respNum;
+    int respLen;
 
 
     if (argc == 3) // zero optional flags set
@@ -98,7 +102,7 @@ int main (int argc, char *argv[]) {
               query_header_ancount, query_header_nscount, query_header_arcount);
 
     buildQueryBody(&DNS_message, argv[argc-1]);
-
+    QNAME_LEN = strlen(argv[argc-1]) + 1;
 
 
     // printf("\nDNS_message ID: %x  %x\n", query_id, htons(query_id));
@@ -106,9 +110,10 @@ int main (int argc, char *argv[]) {
 
     // printf("\nsize of DNS_message.data() %d\n", DNS_message.size()*sizeof(uint16_t));
 
-    printf("\n%s, %d\n", DNSServIP, PORT);
+    // printf("\n%s, %d\n", DNSServIP, PORT);
 
 
+    fromSize = sizeof(fromAddr);
     while (RETRIES != 0) {
         --RETRIES; // remove 1 retry attempt
         /* Send DNS query to the server */
@@ -116,13 +121,14 @@ int main (int argc, char *argv[]) {
                 (struct sockaddr *) &serverAddr, sizeof(serverAddr)) != DNS_message.size()*sizeof(uint16_t))
             dieWithError((char *)"sendto() sent a different number of bytes than expected");
 
-        printf("\n%lu\n", DNS_message.size()*sizeof(uint16_t));
-
+        // printf("\nDNS_message size: %lu\n", DNS_message.size()*sizeof(uint16_t));
+        
         alarm(TIMEOUT_SECONDS); // set timeout for TIMEOUT_SECONDS seconds
-        respNum = recvfrom(sock, DNS_response, MAX_BUFF, 0, (struct sockaddr *) &fromAddr, &fromSize);
+        respLen = recvfrom(sock, DNS_response, MAX_BUFF, 0, (struct sockaddr *) &fromAddr, &fromSize);
 
+        // printf("\nrespLen: %d\n", respLen);
         /* response error handler */
-        if (respNum == -1) {
+        if (respLen == -1) {
             if (errno == EINTR) { /* timeout occured */
                 if (RETRIES == 0)
                     dieWithError((char *)"timeout retry attempt max reached");
@@ -137,9 +143,152 @@ int main (int argc, char *argv[]) {
         alarm(0);
     }
 
+    processResponse(DNS_response, respLen);
+
 
 
 	return 0;
+}
+
+
+void processResponse(uint8_t DNS_response[], int respLen) {
+    printf("\n");
+    int i;
+    // for (i = 0; i < respLen; ++i) {
+    //     printf("%x ", *(DNS_response + i));
+    // }
+    // printf("\n");
+
+    char server_is_authoritative;
+    char *auth_string;
+    char recursion_available;
+    uint16_t numResponses;
+    uint16_t type;
+    unsigned int response_offset = 12;
+
+    recursion_available = (DNS_response[3] & 0x80) >> 7;
+    if (recursion_available != 1) dieWithError((char *)"processResponse()"
+        " failed - server does not support recuresive queries");
+
+    server_is_authoritative = (DNS_response[2] & 0x04) >> 2;
+    if (server_is_authoritative) auth_string = (char *)"auth";
+    else auth_string = (char *)"nonauth";
+    // printf("\n%s\n", auth_string);
+    numResponses = (DNS_response[6] << 8) + DNS_response[7];
+    // printf("\n%d\n", numResponses);
+    if (numResponses == 0) {
+        fprintf(stdout, "NOTFOUND");
+        exit(0);
+    }
+
+
+    response_offset = skipName(DNS_response, response_offset) + 5;
+
+    for (i = 0; i < numResponses; ++i) {
+        response_offset = skipName(DNS_response, response_offset);
+        type = (DNS_response[response_offset] << 8) + DNS_response[response_offset + 1];
+        response_offset += 4; // skip to time to live
+        response_offset = processAnswer(DNS_response, response_offset, type, auth_string);
+    }
+
+    // response_index = 12 + QNAME_LEN + 5; /* set response index to the beggining of the answer section */
+
+
+    // for (i = 0; i < numResponses; ++i) {
+    //     label_length = DNS_response[response_index];
+    //     addLabelsToResponseString(&DNS_response, &response_string, label_length, response_index);
+    // }
+}
+
+
+int processAnswer(uint8_t DNS_response[], unsigned int response_offset, uint16_t type, char *auth_string) {
+    string response_string = "";
+    int data_length = 0;
+    uint32_t time_to_live = 0;
+
+    // printf("\nresponse_offset: %d -> %x\n", response_offset, DNS_response[response_offset]);
+    if (type == 0x0001) {
+        response_string.append("IP\t");
+        time_to_live = (DNS_response[response_offset] << 24) + (DNS_response[response_offset + 1] << 16)
+                     + (DNS_response[response_offset + 2] << 8) + (DNS_response[response_offset + 3]);
+        response_offset += 4;
+        data_length = (DNS_response[response_offset] << 8) + DNS_response[response_offset + 1];
+        response_offset += 2;
+        addIPAddressToResponseString(DNS_response, &response_string, response_offset);
+    }
+    else if (type == 0x0005) {
+        response_string.append("CNAME\t");
+        time_to_live = (DNS_response[response_offset] << 24) + (DNS_response[response_offset + 1] << 16)
+                     + (DNS_response[response_offset + 2] << 8) + (DNS_response[response_offset + 3]);
+        response_offset += 4;
+        data_length = (DNS_response[response_offset] << 8) + DNS_response[response_offset + 1];
+        response_offset += 2;
+        // printf("\nAlias begin: %d -> %x\n", response_offset, DNS_response[response_offset + 1]);
+
+        addAliasToResponseString(DNS_response, &response_string, response_offset);
+        response_string.push_back('\t');
+    }
+    else
+        dieWithError((char *)"processResponse() failed - invalid response type");
+
+    // printf("\nresponse_offset: %d -> %x\n", response_offset, DNS_response[response_offset]);
+
+    response_string.append(to_string(time_to_live));
+    response_string.append("\t");
+    response_string.append(auth_string);
+    printf("\n%s\n", response_string.c_str());
+
+    return response_offset + data_length;
+}
+
+
+void addIPAddressToResponseString(uint8_t DNS_response[], string *response_string, unsigned int response_offset) {
+    int i;
+    uint8_t IP_octet;
+
+    for (i = 0; i < 3; ++i) {
+        IP_octet = DNS_response[response_offset++];
+        response_string->append(to_string((int)IP_octet) + ".");
+    }
+
+    IP_octet = DNS_response[response_offset++];
+    response_string->append(to_string((int)IP_octet));
+
+    response_string->push_back('\t');
+}
+
+
+unsigned int skipName(uint8_t DNS_response[], unsigned int response_offset) {
+    while (DNS_response[response_offset] != 0x00) {
+        // printf("\nresponse_offset: %d -> %x\n", response_offset, DNS_response[response_offset]);
+        ++response_offset;
+    }
+    return response_offset;  // skip type and class
+}
+
+
+void addAliasToResponseString(uint8_t DNS_response[], string *response_string, unsigned int response_offset) {
+    int i, size;
+    // printf("\nGot here %d\n", response_offset);
+    if (DNS_response[response_offset] == 0xC0) { /* pointer */
+        // printf("\n---1---\n");
+        addAliasToResponseString(DNS_response, response_string, DNS_response[response_offset + 1]);
+    }
+    else if (DNS_response[response_offset] != 0x00) { /* end of name */
+        //printf("\n%d -> %x\n", response_offset, DNS_response[response_offset]);
+        size = DNS_response[response_offset++];
+        // printf("\n%d\n", size);
+        for (i = 0; i < size; ++i) {
+            // printf("%d -> %x\n",response_offset, DNS_response[response_offset]);
+            response_string->push_back(DNS_response[response_offset++]);
+            //usleep(250000);
+        }
+        response_string->push_back('.');
+        // printf("\n---2---\n");
+        // printf("\nDNS_response[response_offset]: %x\n", DNS_response[response_offset]);
+        addAliasToResponseString(DNS_response, response_string, response_offset);
+    }
+    else return; /* end of name is reached - base case */
 }
 
 
@@ -152,9 +301,9 @@ void catchAlarm(int ignored) { return; } /* don't do anything in handler, just r
 
 
 /*  buildQueryHeader
-    input       - query header information
+    input       - DNS message and the header information
     output      - none
-    description - 
+    description - appends header information to the DNS_message
 */
 void buildQueryHeader(vector<uint16_t> *DNS_message, uint16_t query_id, uint16_t query_header_flags,
                 uint16_t query_header_qdcount, uint16_t query_header_ancount,
@@ -169,6 +318,11 @@ void buildQueryHeader(vector<uint16_t> *DNS_message, uint16_t query_id, uint16_t
 }
 
 
+/*  buildQueryBody
+    input       - DNS message and the host name
+    output      - none
+    description - parses the host name and appends the body of the query to the DNS_message
+*/
 void buildQueryBody(vector<uint16_t> *DNS_message, char * host_name) {
     vector<uint8_t> label_sizes; /* labels are the names of the subdomains (i.e. www, google, com)*/
     vector<uint8_t> DNS_body;
@@ -223,6 +377,11 @@ void buildQueryBody(vector<uint16_t> *DNS_message, char * host_name) {
 }
 
 
+/*  addBodyToDNSMessage
+    input       - query header information
+    output      - none
+    description - appends header information to the DNS_message
+*/
 void addBodyToDNSMessage(vector<uint8_t> *DNS_body, vector<uint16_t> *DNS_message) {
     int i;
     bool odd_octet = false; /* used for last word in message */

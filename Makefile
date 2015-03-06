@@ -16,7 +16,7 @@ DNSClient: $(DNSCLIENTOBJS)
 	${CC} -o dnsq $@.o ErrorFunctions.o
 
 test:
-	./dnsq -p 6767 -t 2 -r 3 @192.168.1.254 gmail.google.com
+	./dnsq -t 5 -r 5 @130.127.255.250 www.grad.clemson.edu
 
 backup:
 	rm -f DNSClient.tar.gz

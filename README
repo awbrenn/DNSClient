@@ -1,0 +1,52 @@
+Programmer: Austin Brennan
+Class:		CPSC 3600
+Professor:	Remy Sekou
+Due Date:	03/06/2015
+
+DNS Client
+
+
+Program Description:
+This program builds a DNS query and requests a server
+to resolve this query and send a response. The program
+then parse the response returned from the server and
+prints out the CNAME and A documents.
+
+Build Instructions:
+$> tar -xvzf awbrenn-hw2.tar.gz
+$> make
+
+
+Use Case:
+dnsq [-t <time>] [-r <retries>] [-p <port>] @<svr> <name>
+
+timeout (Optional): 
+		Indicates in seconds, how long to wait
+		before regenerating an unanswered query.
+		Default value: 5.
+
+retries (Optional):
+		The number of times the client will
+		re-generate the query, before it quits 
+		with an error, if no response is received
+		from the server.
+		Default value: 3.
+
+port (Optional): The DNS server’s UDP port. Default 
+		value: 53.
+
+server (Required): The IP address
+		of the DNS server (e.g.,192.168.0.12).	
+	
+name (Required): The name we’re looking for.
+
+
+Output Format (different types of output):
+IP<tab><IP address><tab><secs can be cached><tab><auth|nonauth>
+
+CNAME<tab><alias><tab><secs can be cached><tab><auth|nonauth>
+
+NOTFOUND
+
+ERROR
+

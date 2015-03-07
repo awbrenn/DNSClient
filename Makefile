@@ -16,7 +16,7 @@ DNSClient: $(DNSCLIENTOBJS)
 	${CC} -o dnsq $@.o ErrorFunctions.o
 
 test:
-	./dnsq -t 5 -r 5 @130.127.255.250 www.grad.clemson.edu
+	./dnsq -t 5 -r 5 @130.127.255.250 www.clemson.edu
 
 backup:
 	rm -f DNSClient.tar.gz
@@ -24,4 +24,4 @@ backup:
 	gzip -f DNSClient.tar
 
 clean:
-	rm -f dnsq *.o *.out client
+	rm -f dnsq *.o *.out client *~

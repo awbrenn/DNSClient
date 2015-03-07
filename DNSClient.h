@@ -1,9 +1,9 @@
 /*********************************************************
-File Name:  valueGuessGame.h
+File Name:  DNSClient.h
 Author:     Austin Brennan
 Course:     CPSC 3600
 Instructor: Sekou Remy
-Due Date:   January 30th, 2015
+Due Date:   03/06/2015
 
 
 File Description:

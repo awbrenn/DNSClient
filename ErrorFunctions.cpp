@@ -19,8 +19,6 @@ List of routines:
 #include <stdlib.h> /* for exit() */
 #include <string.h>
 
-using namespace std;
-
 /*  DieWithError
     input        - takes an error message
     output       - none
